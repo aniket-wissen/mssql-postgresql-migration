@@ -17,8 +17,8 @@
 ## 2. Clone the Project
 
 ```bash
-git clone <your-repo-url>
-cd sybase-postgres-migration
+git clone https://github.com/aniket-wissen/mssql-postgresql-migration.git
+cd mssql-postgresql-migration
 ```
 
 ---
