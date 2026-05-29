@@ -49,7 +49,7 @@ def validate_sql(sql: str) -> dict:
     """
     print(f"    [Skill: validate_sql] Running...")
     sql_upper = sql.upper().strip()
-    valid_starts = ["CREATE", "INSERT", "SELECT", "DROP", "ALTER"]
+    valid_starts = ["CREATE", "INSERT", "SELECT", "DROP", "ALTER", "GRANT", "REVOKE"]
     is_valid = any(sql_upper.startswith(kw) for kw in valid_starts)
     reason = "Valid SQL keyword found" if is_valid else "No valid SQL keyword at start"
     print(f"    [Skill: validate_sql] {reason}")

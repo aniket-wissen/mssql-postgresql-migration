@@ -8,6 +8,7 @@ from validator import validate_table
 from prompts.validation_prompts import get_final_summary_prompt
 from prompts.orchestrator_prompts import get_migration_order_prompt
 from skills.report_skills import save_report, format_separator
+from agents.permissions_agent import run_permissions_agent
 
 
 def decide_migration_order(tables: list) -> list:
@@ -66,6 +67,17 @@ def run_migration():
 
         migration_summary.append(result)
 
+    # Permissions Migration
+    print(format_separator("MIGRATING USERS, ROLES & PERMISSIONS"))
+    permissions_result = run_permissions_agent()
+    migration_summary.append({
+        "table": "permissions",
+        "schema": None,
+        "data": None,
+        "validation": permissions_result,
+        "error": permissions_result.get("error")
+    })
+    
     # Final AI Summary
     print(format_separator("MIGRATION COMPLETE — AI SUMMARY"))
     final_report = ask_ai(
