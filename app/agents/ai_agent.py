@@ -1,0 +1,22 @@
+import os
+from groq import Groq
+from dotenv import load_dotenv
+
+load_dotenv()
+
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+MODEL = "llama-3.3-70b-versatile"
+
+
+def ask_ai(prompt: str, skill_name: str = "unknown") -> str:
+    print(f"\n  [AI Agent] Skill: '{skill_name}'")
+    print(f"  [AI Agent] Prompt: {prompt[:80].strip()}...")
+
+    response = client.chat.completions.create(
+        model=MODEL,
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    result = response.choices[0].message.content
+    print(f"  [AI Agent] Response: {result[:80].strip()}...")
+    return result
