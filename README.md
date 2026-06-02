@@ -45,7 +45,7 @@ source venv/bin/activate
 ## 4. Install Dependencies
 
 ```bash
-pip install pymssql psycopg2-binary python-dotenv groq
+pip install pymssql psycopg2-binary python-dotenv groq requests "fastmcp[server]"
 ```
 
 | Package | Purpose |
@@ -54,6 +54,8 @@ pip install pymssql psycopg2-binary python-dotenv groq
 | `psycopg2-binary` | Connect to PostgreSQL |
 | `python-dotenv` | Load .env config file |
 | `groq` | Connect to Groq AI API |
+| `requests` | HTTP calls from MCP client to MCP server |
+| `fastmcp[server]` | Run the PostgreSQL MCP server |
 
 ---
 
@@ -134,6 +136,7 @@ Groq is the free AI service that powers the migration intelligence. (This will b
 app/
 ├── agents/          # AI subagents — each handles one migration task
 ├── db/              # Database connectors for MSSQL and PostgreSQL
+├── mcps/           # MCP server and client for PostgreSQL
 ├── prompts/         # AI instruction templates sent to Groq
 ├── skills/          # Reusable utility functions used by agents
 ├── ai_agent.py      # Groq API connector
@@ -154,12 +157,59 @@ output/              # Migration reports saved here after each run
 | Data Agent | `agents/data_agent.py` | AI generates INSERT statements and migrates rows |
 | Error Agent | `agents/error_agent.py` | AI analyses failures and suggests fixes |
 | Validator | `agents/validator.py` | AI compares row counts and produces a validation report |
+| Permissions Agent | `agents/permissions_agent.py` | AI migrates users, roles and grants |
 
 ---
 
-## 11. Run the Migration
+## 11. MCP Server
+
+The project uses a **Model Context Protocol (MCP) server** for all PostgreSQL operations. Instead of each agent managing its own database connection, all PostgreSQL operations go through one central MCP server.
+
+```
+Agent → MCP Client → MCP Server → PostgreSQL
+```
+
+**Why MCP?**
+- Single point of control for all PostgreSQL operations
+- Better observability — every DB operation is logged
+- Agents do not need to manage connection lifecycles
+
+**MCP Tools exposed by the server:**
+
+| Tool | What it does |
+|---|---|
+| `execute_sql` | Run CREATE, DROP, INSERT, GRANT statements |
+| `query_sql` | Run SELECT queries and return results |
+| `get_tables` | List all tables in the database |
+| `get_table_schema` | Get column definitions for a table |
+| `get_row_count` | Count rows in a table |
+| `get_roles` | List all roles and memberships |
+
+---
+
+## 12. Running the Migration
+
+The migration requires **two terminals** — one for the MCP server and one for the pipeline.
+
+### Terminal 1 — Start the MCP Server first
 
 ```bash
+venv\Scripts\activate
+cd app
+python mcps/postgres_server.py
+```
+
+You should see:
+```
+Starting PostgreSQL MCP Server on http://127.0.0.1:8000
+```
+
+> Keep this terminal open. The MCP server must be running before starting the migration.
+
+### Terminal 2 — Run the Migration Pipeline
+
+```bash
+venv\Scripts\activate
 cd app
 python main.py
 ```
@@ -167,10 +217,13 @@ python main.py
 You will see live output as each table is processed:
 
 ```
+[MCP Client] Session initialized: abc123...
 [Orchestrator] AI decided migration order: ['departments', 'employees']
 [Schema Agent] Converting schema for 'departments'...
+    [MCP Client] execute_sql: DROP TABLE IF EXISTS departments CASCADE...
 [Data Agent] Migrating data for 'departments'...
 [Validator] Validating 'departments'...
+    [MCP Client] get_row_count: departments
 --- AI Validation Report: PASS ---
 ```
 

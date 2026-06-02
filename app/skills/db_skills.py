@@ -1,19 +1,31 @@
-from db.target_writer import get_connection, execute_sql
+from db.target_writer import get_connection
+from mcps.postgres_client import mcp_postgres
 
 
 def drop_table(table_name: str):
+    """
+    WHY MCP: Delegates DROP TABLE to MCP server.
+    Single point of control for all DDL operations.
+    """
     print(f"    [Skill: drop_table] Dropping '{table_name}' if exists...")
-    execute_sql(f"DROP TABLE IF EXISTS {table_name} CASCADE")
-    print(f"    [Skill: drop_table] Done")
+    result = mcp_postgres.execute_sql(f"DROP TABLE IF EXISTS {table_name} CASCADE")
+    print(f"    [Skill: drop_table] {result}")
 
 
 def create_table(create_sql: str):
+    """
+    WHY MCP: Delegates CREATE TABLE to MCP server.
+    """
     print(f"    [Skill: create_table] Executing CREATE TABLE...")
-    execute_sql(create_sql)
-    print(f"    [Skill: create_table] Done")
+    result = mcp_postgres.execute_sql(create_sql)
+    print(f"    [Skill: create_table] {result}")
 
 
 def insert_rows(insert_sql: str, rows: list):
+    """
+    WHY DIRECT: Bulk inserts use psycopg2 directly for performance.
+    MCP HTTP overhead per row would be too slow for 1M rows.
+    """
     print(f"    [Skill: insert_rows] Inserting {len(rows)} rows...")
     conn = get_connection()
     cursor = conn.cursor()
@@ -25,12 +37,12 @@ def insert_rows(insert_sql: str, rows: list):
     print(f"    [Skill: insert_rows] Done")
 
 
-def get_row_count(table_name: str, connection_fn) -> int:
+def get_row_count(table_name: str, connection_fn=None) -> int:
+    """
+    WHY MCP: Simple read operation — perfect for MCP.
+    No need for raw DB connection just to count rows.
+    """
     print(f"    [Skill: get_row_count] Counting rows in '{table_name}'...")
-    conn = connection_fn()
-    cursor = conn.cursor()
-    cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
-    count = cursor.fetchone()[0]
-    conn.close()
+    count = mcp_postgres.get_row_count(table_name)
     print(f"    [Skill: get_row_count] Count: {count}")
     return count

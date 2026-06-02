@@ -21,4 +21,11 @@ Rules:
 - Each statement on its own line ending with semicolon
 - No markdown, no explanations, no code fences
 - Order: CREATE ROLEs first, then GRANT memberships, then GRANT permissions
+
+CRITICAL FORMATTING RULES:
+- Always put a space between ON and the schema: GRANT SELECT ON public.table TO role
+- Never write ONpublic or ONschema — always ON public or ON schema
+- Double check every GRANT statement has correct spacing before returning
+- Example correct format: GRANT SELECT ON public.employees TO data_reader;
+- Example wrong format: GRANT SELECT ONpublic.employees TO data_reader;
 """

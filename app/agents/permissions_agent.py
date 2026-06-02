@@ -2,22 +2,14 @@ from agents.ai_agent import ask_ai
 from db.permissions_extractor import extract_all_permissions
 from prompts.permissions_prompts import get_permissions_conversion_prompt
 from skills.sql_skills import clean_sql, validate_sql
-from db.target_writer import execute_sql
 from skills.report_skills import save_table_report
+from mcps.postgres_client import mcp_postgres
 
 
 def run_permissions_agent() -> dict:
     """
     Subagent: permissions_agent
-    Responsibility: Extract MSSQL users/roles/permissions and recreate in PostgreSQL
-    Input: none — reads directly from source DB
-    Output: {status, statements_applied, error}
-
-    WHY WE NEED THIS:
-    Schema and data migration alone is not enough for a production system.
-    Without users, roles and permissions, no application or developer
-    can access the migrated database with the correct access level.
-    This agent ensures the entire access control structure is preserved.
+    Uses MCP server for all PostgreSQL permission operations.
     """
     print("\n[Permissions Agent] Starting permissions migration...")
 
@@ -43,8 +35,21 @@ def run_permissions_agent() -> dict:
     pg_sql = clean_result["cleaned_sql"]
 
     print(f"\n[Permissions Agent] AI Generated SQL:\n{pg_sql}")
+    
+    # Step 3 — AI self-reviews its own output to catch mistakes
+    review_prompt = f"""
+    Review these PostgreSQL SQL statements for syntax errors.
+    Fix any issues you find — especially spacing in GRANT statements.
+    Return ONLY the corrected SQL statements, no explanation.
 
-    # Step 3 — Split into individual statements and apply
+    {pg_sql}
+    """
+    reviewed = ask_ai(review_prompt, skill_name="permissions_self_review")
+    clean_reviewed = clean_sql(reviewed)
+    pg_sql = clean_reviewed["cleaned_sql"]
+
+    print(f"\n[Permissions Agent] AI Self-Reviewed SQL:\n{pg_sql}")
+
     statements = [s.strip() for s in pg_sql.split(";") if s.strip()]
 
     applied = 0
@@ -53,25 +58,23 @@ def run_permissions_agent() -> dict:
     for statement in statements:
         validation = validate_sql(statement)
         if not validation["is_valid"]:
-            print(f"[Permissions Agent] Skipping invalid statement: {statement[:50]}")
+            print(f"[Permissions Agent] Skipping invalid: {statement[:50]}")
             continue
-        try:
-            execute_sql(statement)
-            print(f"[Permissions Agent] Applied: {statement[:60]}...")
-            applied += 1
-        except Exception as e:
-            error_msg = str(e).lower()
-            # Role already exists — not a real failure, safe to skip
-            if "already exists" in error_msg:
+
+        # Use MCP server for all permission operations
+        result_msg = mcp_postgres.execute_sql(statement)
+
+        if "ERROR" in str(result_msg):
+            error_lower = result_msg.lower()
+            if "already exists" in error_lower or "already a member" in error_lower:
                 print(f"[Permissions Agent] Skipped (already exists): {statement[:60]}...")
                 applied += 1
-            # Permission already granted — safe to skip
-            elif "already a member" in error_msg or "duplicate" in error_msg:
-                print(f"[Permissions Agent] Skipped (already granted): {statement[:60]}...")
-                applied += 1
             else:
-                print(f"[Permissions Agent] Failed: {statement[:60]}... Error: {e}")
-                failed.append({"statement": statement, "error": str(e)})
+                print(f"[Permissions Agent] Failed: {result_msg}")
+                failed.append({"statement": statement, "error": result_msg})
+        else:
+            print(f"[Permissions Agent] Applied: {statement[:60]}...")
+            applied += 1
 
     result["status"] = "success" if applied > 0 else "failed"
     result["statements_applied"] = applied
